@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SignBridge Landmark Demo</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 2rem auto;
+      max-width: 900px;
+      padding: 0 1rem;
+      color: #1a1a1a;
+    }
+    h1 { font-size: 1.4rem; }
+    .stage {
+      position: relative;
+      width: 640px;
+      max-width: 100%;
+      background: #000;
+    }
+    video, canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    canvas { position: absolute; inset: 0; }
+    .controls { margin: 1rem 0; display: flex; gap: 1rem; align-items: center; }
+    #status-line {
+      font-family: ui-monospace, monospace;
+      padding: 0.5rem;
+      background: #f2f2f2;
+      border-radius: 4px;
+    }
+    #error-box {
+      color: #b00020;
+      background: #fde7ea;
+      padding: 0.5rem;
+      border-radius: 4px;
+      margin-top: 1rem;
+    }
+    .note { color: #555; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>SignBridge Landmark Demo (Direction A, step 1)</h1>
+
+  <div class="stage">
+    <video id="webcam" playsinline muted></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <div class="controls">
+    <button id="start">Start camera</button>
+    <button id="stop" disabled>Stop</button>
+    <label>
+      <input type="checkbox" id="pose-toggle" checked />
+      Track upper-body pose
+    </label>
+  </div>
+
+  <p id="status-line">Idle.</p>
+  <p id="error-box" hidden></p>
+
+  <p class="note">
+    All processing happens on this device. Video frames never leave the
+    browser; only landmark coordinates are computed and queued. The first run
+    needs internet access to load MediaPipe and its models from the CDN.
+    Webcam access requires this page to be served from localhost or HTTPS.
+  </p>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

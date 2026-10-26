@@ -25,7 +25,13 @@ The rigged avatar performs signs with motion interpolation and facial grammar. G
 
 ## Quickstart
 
-TODO: quickstart instructions once the build tooling is in place (web app bundler, API key setup via environment variables). No dependencies are installed yet.
+The landmark demo (Direction A step 1) runs with no build step. From the repository root:
+
+```
+python3 -m http.server 8080
+```
+
+Open http://localhost:8080/web/, allow the camera, and press Start. See `web/README.md` for the full manual verification checklist. Muse API integration is still a stub (see `api/`), so the sign to speech path is not wired up yet.
 
 ## Repository layout
 
