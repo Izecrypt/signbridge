@@ -53,6 +53,8 @@ function refreshStatus() {
 startButton.addEventListener("click", async () => {
   clearError();
   startButton.disabled = true;
+  statusLine.textContent =
+    "Loading MediaPipe models. First run downloads them, can take 10 to 30 seconds on a slow connection...";
   try {
     // Size the overlay canvas to the video once frames flow.
     const sizeCanvas = () => {
