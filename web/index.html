@@ -5,73 +5,146 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SignBridge Landmark Demo</title>
   <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1117;
+      --panel: #151c26;
+      --soft: #1d2936;
+      --text: #f4f7fb;
+      --muted: #9eacbd;
+      --line: #2b394a;
+      --accent: #62e6a7;
+      --danger: #ff9aa5;
+    }
     body {
       font-family: system-ui, sans-serif;
-      margin: 2rem auto;
-      max-width: 900px;
-      padding: 0 1rem;
-      color: #1a1a1a;
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
     }
-    h1 { font-size: 1.4rem; }
+    .shell { max-width: 1120px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 2rem; }
+    .eyebrow { color: var(--accent); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+    h1 { margin: 0.25rem 0 0; font-size: clamp(1.9rem, 4vw, 2.7rem); letter-spacing: -0.04em; }
+    h2 { margin: 0; font-size: 1rem; }
+    .privacy-badge, .state-badge { border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 0.8rem; padding: 0.5rem 0.75rem; white-space: nowrap; }
+    .privacy-badge { color: var(--accent); border-color: #28694c; background: #123b2a; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.8fr); gap: 1rem; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 1rem; padding: 1rem; box-shadow: 0 18px 50px #0003; }
+    .stage-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.8rem; }
     .stage {
       position: relative;
-      width: 640px;
+      width: 100%;
       max-width: 100%;
       background: #000;
+      border-radius: 0.75rem;
+      overflow: hidden;
+      aspect-ratio: 16 / 9;
     }
     video, canvas {
       display: block;
       width: 100%;
-      height: auto;
+      height: 100%;
+      object-fit: cover;
     }
     canvas {
       position: absolute;
       inset: 0;
       pointer-events: none;
     }
-    .controls { margin: 1rem 0; display: flex; gap: 1rem; align-items: center; }
+    .controls { margin: 1rem 0 0; display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+    button { border: 0; border-radius: 0.65rem; cursor: pointer; font: inherit; font-weight: 700; padding: 0.75rem 1rem; }
+    #start { background: var(--accent); color: #092116; }
+    #stop { background: var(--soft); color: var(--text); border: 1px solid var(--line); }
+    button:disabled { cursor: not-allowed; opacity: 0.45; }
+    label { color: var(--muted); font-size: 0.9rem; }
     #status-line {
       font-family: ui-monospace, monospace;
       padding: 0.5rem;
-      background: #f2f2f2;
+      background: var(--soft);
+      color: var(--muted);
       border-radius: 4px;
+      margin: 1rem 0 0;
     }
     #error-box {
-      color: #b00020;
-      background: #fde7ea;
+      color: var(--danger);
+      background: #451d28;
       padding: 0.5rem;
       border-radius: 4px;
       margin-top: 1rem;
     }
-    .note { color: #555; font-size: 0.9rem; }
+    .side-stack { display: grid; gap: 1rem; align-content: start; }
+    .signal { display: grid; gap: 0.75rem; margin-top: 1rem; }
+    .signal-row { background: var(--soft); border: 1px solid var(--line); border-radius: 0.75rem; padding: 0.9rem; }
+    .signal-label { color: var(--muted); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; }
+    .signal-value { margin-top: 0.4rem; min-height: 1.5rem; }
+    .hint, .note { color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+    @media (max-width: 760px) {
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .layout { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
-  <h1>SignBridge Landmark Demo (Direction A, step 1)</h1>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">Accessibility bridge</div>
+        <h1>SignBridge</h1>
+      </div>
+      <div class="privacy-badge">Video stays on this device</div>
+    </header>
 
-  <div class="stage">
-    <video id="webcam" playsinline muted></video>
-    <canvas id="overlay"></canvas>
-  </div>
+    <section class="layout">
+      <div class="card">
+        <div class="stage-header">
+          <h2>Sign to voice</h2>
+          <span class="state-badge">Landmark preview</span>
+        </div>
+        <div class="stage">
+          <video id="webcam" playsinline muted></video>
+          <canvas id="overlay"></canvas>
+        </div>
 
-  <div class="controls">
-    <button id="start" type="button">Start camera</button>
-    <button id="stop" type="button" disabled>Stop</button>
-    <label>
-      <input type="checkbox" id="pose-toggle" checked />
-      Track upper-body pose
-    </label>
-  </div>
+        <div class="controls">
+          <button id="start" type="button">Start camera</button>
+          <button id="stop" type="button" disabled>Stop</button>
+          <label>
+            <input type="checkbox" id="pose-toggle" checked />
+            Track upper-body pose
+          </label>
+        </div>
 
-  <p id="status-line">Idle.</p>
-  <p id="error-box" hidden></p>
+        <p id="status-line" aria-live="polite">Idle. Press Start.</p>
+        <p id="error-box" role="alert" hidden></p>
+      </div>
 
-  <p class="note">
-    All processing happens on this device. Video frames never leave the
-    browser; only landmark coordinates are computed and queued. The first run
-    needs internet access to load MediaPipe and its models from the CDN.
-    Webcam access requires this page to be served from localhost or HTTPS.
-  </p>
+      <aside class="side-stack">
+        <div class="card">
+          <h2>Conversation</h2>
+          <div class="signal">
+            <div class="signal-row">
+              <div class="signal-label">What I signed</div>
+              <div class="signal-value">Waiting for camera input</div>
+            </div>
+            <div class="signal-row">
+              <div class="signal-label">English output</div>
+              <div class="signal-value">Translation will appear here</div>
+            </div>
+          </div>
+          <p class="hint">The first build focuses on a small, reliable coffee-shop vocabulary.</p>
+        </div>
+
+        <div class="card">
+          <h2>On-device processing</h2>
+          <p class="hint">The camera feed is processed locally. Only structured landmarks and text can leave this device.</p>
+        </div>
+      </aside>
+    </section>
+
+    <p class="note">The first run downloads MediaPipe models from the CDN and may take 10 to 30 seconds. Webcam access requires localhost or HTTPS.</p>
+  </main>
 
   <script type="module" src="./app.js"></script>
 </body>
