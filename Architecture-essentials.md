@@ -14,8 +14,8 @@ One-page reference. Full detail in `Architecture.md` and `PRD.md`.
 
 ## Module map
 
-- `web/landmarks.js` - webcam capture, MediaPipe landmark pipeline (stub). Direction A entry.
-- `api/muse.js` - the only module that calls Muse Spark / Wonder / Image (stub). Functions: `translateGlossToEnglish`, `speak`, `transcribe`, `englishToGloss`.
+- `web/landmarks.js` - webcam capture, MediaPipe hand + pose landmark pipeline (working, no build step). Direction A entry.
+- `api/muse.js` - the only module that calls model APIs (muse-spark-1.3). Functions: `glossFromLandmarks`, `glossToEnglish`, `speakEnglish` (browser voice, on-device). `transcribe`, `englishToGloss` are Direction B stubs.
 - `avatar/rig.js` - Three.js avatar rig (stub). Functions: `createAvatarRig`, `planAndPerform`.
 - `avatar/dictionary.js` - SignBank dictionary loader (stub). Function: `loadSignDictionary`.
 - `data/README.md` - dataset sources and license notes.
@@ -32,4 +32,4 @@ None yet beyond git. No build tool, no dependencies installed. Bundler (Vite) is
 
 ## Current state
 
-Everything is a stub; all functions throw "not implemented". First build task (days 1 to 2): vertical slice, verify Muse API modalities and rate limits, browser landmark pipeline.
+Direction A v1 is live end to end: webcam -> MediaPipe landmarks (on-device) -> 2s windows -> compact text description -> muse-spark-1.3 gloss (or FINGERSPELL) -> English sentence -> browser speech. Direction B, the temporal model on WLASL / MS-ASL, and the avatar are not started. Key facts: base URL https://api.meta.ai/v1 (OpenAI-compatible), model muse-spark-1.3, 3000 RPM / 4M TPM per team, no hosted TTS (speechSynthesis instead, on-device).

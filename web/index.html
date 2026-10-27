@@ -114,7 +114,23 @@
             <input type="checkbox" id="pose-toggle" checked />
             Track upper-body pose
           </label>
+          <label>
+            <input type="checkbox" id="translate-toggle" />
+            Live translate (Muse)
+          </label>
         </div>
+
+        <div class="controls">
+          <input
+            type="password"
+            id="api-key"
+            placeholder="Muse API key (session only)"
+            autocomplete="off"
+            aria-label="Muse API key"
+            style="flex: 1; min-width: 240px; padding: 0.55rem 0.7rem; border-radius: 0.5rem; border: 1px solid var(--line); background: var(--soft); color: var(--text); font: inherit;"
+          />
+        </div>
+        <p class="hint" id="key-note"></p>
 
         <p id="status-line" aria-live="polite">Idle. Press Start.</p>
         <p id="error-box" role="alert" hidden></p>
@@ -126,19 +142,22 @@
           <div class="signal">
             <div class="signal-row">
               <div class="signal-label">What I signed</div>
-              <div class="signal-value">Waiting for camera input</div>
+              <div class="signal-value" id="signed-value">Waiting for camera input</div>
             </div>
             <div class="signal-row">
               <div class="signal-label">English output</div>
-              <div class="signal-value">Translation will appear here</div>
+              <div class="signal-value" id="english-value">Translation will appear here</div>
             </div>
           </div>
+          <p class="hint" id="muse-line">Muse: idle</p>
+          <ul id="transcript" style="font-family: ui-monospace, monospace; font-size: 0.85rem; padding-left: 1.2rem; margin: 0.5rem 0 0;"></ul>
+          <p class="hint" id="budget-line"></p>
           <p class="hint">The first build focuses on a small, reliable coffee-shop vocabulary.</p>
         </div>
 
         <div class="card">
           <h2>On-device processing</h2>
-          <p class="hint">The camera feed is processed locally. Only structured landmarks and text can leave this device.</p>
+          <p class="hint">The camera feed is processed locally. Video frames never leave this browser. The only thing sent to Muse is a short text description of hand motion derived from landmarks, and speech plays through the browser's built-in voice, so spoken output stays on-device too.</p>
         </div>
       </aside>
     </section>
