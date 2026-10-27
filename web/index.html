@@ -24,7 +24,11 @@
       width: 100%;
       height: auto;
     }
-    canvas { position: absolute; inset: 0; }
+    canvas {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
     .controls { margin: 1rem 0; display: flex; gap: 1rem; align-items: center; }
     #status-line {
       font-family: ui-monospace, monospace;
