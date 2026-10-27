@@ -22,6 +22,7 @@ const queue = createLandmarkQueue();
 
 let pipeline = null;
 let statusTimer = 0;
+let startInProgress = false;
 
 function showError(message) {
   errorBox.textContent = message;
@@ -50,7 +51,10 @@ function refreshStatus() {
     `rate: ${s.fps} fps | processed: ${s.framesProcessed} | queued: ${queue.length}`;
 }
 
-startButton.addEventListener("click", async () => {
+async function startFromUserInput(event) {
+  event?.preventDefault();
+  if (startInProgress || pipeline) return;
+  startInProgress = true;
   clearError();
   startButton.disabled = true;
   statusLine.textContent =
@@ -77,6 +81,17 @@ startButton.addEventListener("click", async () => {
   } catch (err) {
     showError(`Could not start: ${err.message || err}`);
     setRunning(false);
+  } finally {
+    startInProgress = false;
+  }
+}
+
+// Keep click as the normal path, with pointerup as a fallback for browsers or
+// extensions that swallow the synthesized click after a physical press.
+startButton.addEventListener("click", startFromUserInput);
+startButton.addEventListener("pointerup", (event) => {
+  if (event.pointerType === "mouse" || event.pointerType === "touch" || event.pointerType === "pen") {
+    startFromUserInput(event);
   }
 });
 

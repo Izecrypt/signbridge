@@ -9,8 +9,6 @@ import {
   FilesetResolver,
   HandLandmarker,
   PoseLandmarker,
-  HAND_CONNECTIONS,
-  POSE_CONNECTIONS,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 
 export const LANDMARK_VERSION = "0.2.0";
@@ -21,6 +19,26 @@ const HAND_MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 const POSE_MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+
+// The 0.10.14 CDN build exposes these connection constants inconsistently
+// across browsers. Keep the small, stable index tables local so drawing never
+// depends on a non-iterable class property.
+const HAND_CONNECTIONS = [
+  [0, 1], [1, 5], [9, 13], [13, 17], [5, 9], [0, 17],
+  [1, 2], [2, 3], [3, 4], [5, 6], [6, 7], [7, 8],
+  [9, 10], [10, 11], [11, 12], [13, 14], [14, 15], [15, 16],
+  [17, 18], [18, 19], [19, 20],
+];
+const POSE_CONNECTIONS = [
+  [0, 1], [1, 2], [2, 3], [3, 7],
+  [0, 4], [4, 5], [5, 6], [6, 8],
+  [9, 10], [11, 12], [11, 13], [13, 15],
+  [15, 17], [15, 19], [15, 21], [17, 19],
+  [12, 14], [14, 16], [16, 18], [16, 20], [16, 22], [18, 20],
+  [11, 23], [12, 24], [23, 24], [23, 25], [24, 26],
+  [25, 27], [26, 28], [27, 29], [28, 30], [29, 31], [30, 32],
+  [27, 31], [28, 32],
+];
 
 const DEFAULT_CAMERA = { width: 1280, height: 720 };
 
