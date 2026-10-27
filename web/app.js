@@ -16,6 +16,7 @@ const stopButton = document.getElementById("stop");
 const poseToggle = document.getElementById("pose-toggle");
 const statusLine = document.getElementById("status-line");
 const errorBox = document.getElementById("error-box");
+const cameraState = document.getElementById("camera-state");
 
 const ctx = canvas.getContext("2d");
 const queue = createLandmarkQueue();
@@ -32,6 +33,10 @@ function showError(message) {
 function clearError() {
   errorBox.hidden = true;
   errorBox.textContent = "";
+}
+
+function setCameraState(label) {
+  cameraState.textContent = label;
 }
 
 function setRunning(running) {
@@ -56,6 +61,7 @@ async function startFromUserInput(event) {
   if (startInProgress || pipeline) return;
   startInProgress = true;
   clearError();
+  setCameraState("Loading models");
   startButton.disabled = true;
   statusLine.textContent =
     "Loading MediaPipe models. First run downloads them, can take 10 to 30 seconds on a slow connection...";
@@ -77,9 +83,11 @@ async function startFromUserInput(event) {
       { maxFps: 15, enablePose: poseToggle.checked }
     );
     setRunning(true);
+    setCameraState("Camera live");
     statusTimer = window.setInterval(refreshStatus, 500);
   } catch (err) {
     showError(`Could not start: ${err.message || err}`);
+    setCameraState("Camera error");
     setRunning(false);
   } finally {
     startInProgress = false;
@@ -103,10 +111,12 @@ stopButton.addEventListener("click", () => {
   window.clearInterval(statusTimer);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   setRunning(false);
+  setCameraState("Camera off");
   refreshStatus();
 });
 
 setRunning(false);
+setCameraState("Camera off");
 refreshStatus();
 console.log(`SignBridge landmark demo v${LANDMARK_VERSION}`);
 
