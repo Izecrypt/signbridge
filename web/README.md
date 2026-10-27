@@ -33,7 +33,7 @@ Do not put the key in any file, URL, or commit. `.env` is gitignored.
 
 1. Camera runs, landmarks stream into the queue at up to 15 fps.
 2. Every 2 seconds the app drains the queue into a window (at least 8 frames).
-3. `glossFromLandmarks` sends Muse a compact text description of that window: per-hand visibility and extended-finger sets, finger spread (adjacent vs split), motion type (stationary, moving, or repeated with a reversal count), relative hand height, and approach vs separation between the two hands. No frames, no images, no raw per-frame coordinates.
+3. `glossFromLandmarks` sends Muse a compact text description of that window: per-hand visibility and extended-finger sets, finger spread (adjacent vs split), motion type (stationary, moving, or repeated with a reversal count), letter-shape features (curl depth per finger as extended / half / tucked, thumb position class alongside / across / between / folded over palm, fingertip clustering, pointing direction), relative hand height, and approach vs separation between the two hands. No frames, no images, no raw per-frame coordinates.
 4. Muse Spark (muse-spark-1.3, temperature 0, reasoning_effort "minimal", max_tokens 512) replies with one gloss word from the fixed 40-sign coffee-shop vocabulary or `FINGERSPELL:<letters>`.
 5. `glossToEnglish` asks Spark for one short natural sentence.
 6. `speakEnglish` speaks it with the browser's built-in voice (on-device). The page shows gloss, sentence, and a running Muse call counter with cost context.

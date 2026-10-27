@@ -186,16 +186,131 @@ function summarizeHand(handFrames, label) {
   return { label, extended };
 }
 
+// ---------------------------------------------------------------------------
+// Letter-discrimination features (fingerspelling). Computed from raw landmark
+// coordinates; only the compact text goes to Muse.
+// ---------------------------------------------------------------------------
+
+function palmLength(hand) {
+  return dist2d(hand[WRIST], hand[9]); // wrist to middle knuckle
+}
+
+// Curl depth as tip-to-wrist distance in palm lengths. A vs E vs S differ
+// here: a plain fist reads tucked, fingertips driven under reads tucked with
+// tips touching, half curl is the C/O family.
+function curlBucketFor(hand, joints) {
+  const ratio = dist2d(hand[joints.tip], hand[WRIST]) / palmLength(hand);
+  if (ratio >= 1.7) return "extended";
+  if (ratio >= 1.3) return "half";
+  return "tucked";
+}
+
+function pointToSegment(p, a, b) {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const len2 = abx * abx + aby * aby;
+  if (len2 === 0) return dist2d(p, a);
+  let t = ((p.x - a.x) * abx + (p.y - a.y) * aby) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - (a.x + t * abx), p.y - (a.y + t * aby));
+}
+
+function sideOf(p, a, b) {
+  return Math.sign((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x));
+}
+
+// Thumb position class: "across" (tip over the front of curled fingers, the
+// S/M/N family), "between" (tip seated in the index-middle gap on the finger
+// side, the T/K family), "folded over palm" (thumb tip back over the palm,
+// the B family), or "alongside" (outside the fist, the A family).
+function thumbClassFor(hand) {
+  const pl = palmLength(hand);
+  const tip = hand[4];
+  const dAcross = Math.min(dist2d(tip, hand[6]), dist2d(tip, hand[10])) / pl;
+  if (dAcross < 0.45) return "across";
+  const dBetween = pointToSegment(tip, hand[5], hand[9]) / pl;
+  if (dBetween < 0.4) {
+    const fingerSide = sideOf(hand[8], hand[5], hand[9]);
+    if (sideOf(tip, hand[5], hand[9]) === fingerSide) return "between";
+    return "folded over palm";
+  }
+  return "alongside";
+}
+
+// Are the four fingertips bunched together (E, O) or spread apart?
+function tipsClusterFor(hand) {
+  const pl = palmLength(hand);
+  const tips = [8, 12, 16, 20].map((i) => hand[i]);
+  let sum = 0;
+  let count = 0;
+  for (let i = 0; i < tips.length; i += 1) {
+    for (let j = i + 1; j < tips.length; j += 1) {
+      sum += dist2d(tips[i], tips[j]);
+      count += 1;
+    }
+  }
+  return sum / count < 0.3 * pl ? "tips touching" : "tips apart";
+}
+
+// Image-plane pointing direction of the knuckle row (palm facing sideways vs
+// up vs down). Camera-facing orientation from z is too noisy to trust.
+function pointingFor(hand) {
+  const dx = hand[9].x - hand[WRIST].x;
+  const dy = hand[9].y - hand[WRIST].y;
+  if (Math.abs(dy) >= Math.abs(dx)) return dy < 0 ? "points up" : "points down";
+  return "points sideways";
+}
+
+function majority(values) {
+  const counts = new Map();
+  for (const v of values) counts.set(v, (counts.get(v) || 0) + 1);
+  let best = values[0];
+  let bestCount = 0;
+  for (const [v, c] of counts) {
+    if (c > bestCount) {
+      best = v;
+      bestCount = c;
+    }
+  }
+  return best;
+}
+
+// Per-hand shape line for letters: curl depth per finger, thumb class,
+// fingertip clustering, pointing direction. Majority vote across frames.
+function shapeDescription(handFrames) {
+  const curlVotes = { index: [], middle: [], ring: [], pinky: [] };
+  const thumbVotes = [];
+  const clusterVotes = [];
+  const pointingVotes = [];
+  for (const hand of handFrames) {
+    for (const finger of Object.keys(curlVotes)) {
+      curlVotes[finger].push(curlBucketFor(hand, FINGER_JOINTS[finger]));
+    }
+    thumbVotes.push(thumbClassFor(hand));
+    clusterVotes.push(tipsClusterFor(hand));
+    pointingVotes.push(pointingFor(hand));
+  }
+  const curls = Object.keys(curlVotes)
+    .map((f) => `${f} ${majority(curlVotes[f])}`)
+    .join(", ");
+  return (
+    `shape: ${curls}, thumb ${majority(thumbVotes)}, ` +
+    `${majority(clusterVotes)}, ${majority(pointingVotes)}`
+  );
+}
+
 /**
  * Turn a window of LandmarkFrames into compact text. This text, and only this
  * text, is what leaves the device for Muse. No images, no video, no raw
  * per-frame coordinates beyond these summaries. Coverage: per-hand visibility
  * and extended-finger sets, finger spread (adjacent vs split), motion type
- * (stationary, moving, or repeated with a reversal count), relative hand
- * height, and approach vs separation between the two hands.
+ * (stationary, moving, or repeated with a reversal count), letter-shape
+ * features (curl depth per finger, thumb position class, fingertip
+ * clustering, pointing direction), relative hand height, and approach vs
+ * separation between the two hands.
  *
  * @param {Array<import("../web/landmarks.js").LandmarkFrame>} frames
- * @returns {string} roughly 40 to 60 tokens
+ * @returns {string} roughly 70 to 90 tokens
  */
 export function describeWindow(frames) {
   if (!frames || frames.length === 0) {
@@ -227,7 +342,8 @@ export function describeWindow(frames) {
     const fingers = summary.extended.length ? summary.extended.join(" ") : "none";
     lines.push(
       `${role} hand (${summary.label}): visible ${seenPct}%, extended: ${fingers}, ` +
-      `${spreadDescription(summary.extended)}, ${motionDescription(bySlot[i])}.`
+      `${spreadDescription(summary.extended)}, ${motionDescription(bySlot[i])}. ` +
+      `${shapeDescription(bySlot[i])}.`
     );
   }
 
@@ -258,6 +374,36 @@ export function describeWindow(frames) {
 // Direction A stage: landmarks -> gloss -> English -> speech
 // ---------------------------------------------------------------------------
 
+const LETTER_CUES = [
+  "Letter-shape cues may appear in the description: curl depth per finger (extended, half, tucked), thumb position (alongside, across, between), fingertip clustering (touching or apart), pointing direction.",
+  "Common fingerspelled letters for reference:",
+  "a fist with thumb alongside;",
+  "b flat palm fingers up thumb folded across palm;",
+  "c curved open hand;",
+  "d index up fingers together thumb touches middle;",
+  "e fingers curled with fingertips tucked under;",
+  "f index and thumb form a circle other fingers up;",
+  "g fist thumb and index extended pointing sideways;",
+  "i fist with pinky up;",
+  "k index and middle up in a V thumb between them;",
+  "l index up thumb out forming an L;",
+  "m thumb folded across three fingers;",
+  "n thumb folded across two fingers;",
+  "o rounded closed fist;",
+  "p like k pointing down;",
+  "q like g pointing down;",
+  "r index and middle crossed;",
+  "s fist thumb across the front;",
+  "t thumb tip between index and middle;",
+  "u index and middle up together;",
+  "v index and middle up split;",
+  "w index middle ring up thumb over pinky;",
+  "x index hooked;",
+  "y thumb and pinky out;",
+  "z like g drawing a Z in the air.",
+  "When the described shape matches a letter, reply FINGERSPELL:<letter> instead of a vocabulary word.",
+].join(" ");
+
 const GLOSS_SYSTEM = [
   "You are the sign recognition stage of a two-way ASL translation demo in a coffee shop.",
   "The user message describes hand shape and motion captured as on-device landmarks from a webcam.",
@@ -265,8 +411,9 @@ const GLOSS_SYSTEM = [
   "Reply with exactly one of:",
   "(1) one gloss word from this fixed vocabulary: " + VOCABULARY.join(", ") + ";",
   "(2) FINGERSPELL:<letters> when the motion does not confidently match any vocabulary sign.",
+  LETTER_CUES,
   "Rules: output the gloss or the FINGERSPELL value only, lowercase, no punctuation, no quotes, no explanation.",
-  "If unsure, always prefer FINGERSPELL over guessing a vocabulary word.",
+  "If unsure, always prefer FINGERSPELL over guessing a vocabulary word, and prefer FINGERSPELL over unclear.",
 ].join(" ");
 
 /**
