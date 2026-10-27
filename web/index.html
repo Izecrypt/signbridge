@@ -80,6 +80,30 @@
     .signal-label { color: var(--muted); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; }
     .signal-value { margin-top: 0.4rem; min-height: 1.5rem; }
     .hint, .note { color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+    #debug-list {
+      list-style: none;
+      margin: 0.5rem 0 0;
+      padding: 0;
+      max-height: 320px;
+      overflow-y: auto;
+      display: grid;
+      gap: 0.5rem;
+    }
+    #debug-list li {
+      background: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 0.5rem;
+      padding: 0.5rem 0.6rem;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+    }
+    #debug-list pre {
+      margin: 0.3rem 0 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--muted);
+      font: inherit;
+    }
     @media (max-width: 760px) {
       .topbar { align-items: flex-start; flex-direction: column; }
       .layout { grid-template-columns: 1fr; }
@@ -159,6 +183,12 @@
           <h2>On-device processing</h2>
           <p class="hint">The camera feed is processed locally. Video frames never leave this browser. The only thing sent to Muse is a short text description of hand motion derived from landmarks, and speech plays through the browser's built-in voice, so spoken output stays on-device too.</p>
         </div>
+
+        <details class="card">
+          <summary><h2 style="display: inline;">Debug (last 10 windows)</h2></summary>
+          <ul id="debug-list"></ul>
+          <p class="hint">Exactly what Muse received for each window, kept in this page only. Nothing here is sent anywhere. The same lines go to the devtools console prefixed SB-DEBUG.</p>
+        </details>
       </aside>
     </section>
 

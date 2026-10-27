@@ -75,3 +75,8 @@ Live translate (paste a valid key first):
 13. Wave your hand vaguely or sign nothing distinctive. The Muse line should show "unclear sign, try again" within about 3 seconds, nothing is spoken, and the unclear counter in the budget line goes up by one.
 14. Network tab while translating: only POSTs to `api.meta.ai/v1/chat/completions`, request payloads contain text descriptions only (readable in devtools), nothing else leaves the browser.
 15. Bad key on purpose: the Muse line shows a clean error (HTTP 401 mapped), the app keeps running and keeps trying the next window.
+16. The "Debug (last 10 windows)" panel under the camera shows one entry per attempt: time, gloss (or unclear / error), and the exact description text sent to Muse. The same lines appear in the devtools console prefixed `SB-DEBUG`.
+
+## Tuning workflow
+
+When recognition falls back more than it should, do not guess at thresholds. Open the devtools console (or the Debug panel), copy 3 to 5 `SB-DEBUG` lines for a sign that worked and 3 to 5 for the signs that fell back (unclear or FINGERSPELL), and paste them to the agent. The failure is almost always visible in the description text itself (muddled shape fields, wrong visibility, jitter counted as motion).

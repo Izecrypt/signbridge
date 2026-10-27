@@ -417,21 +417,20 @@ const GLOSS_SYSTEM = [
 ].join(" ");
 
 /**
- * Ask muse-spark-1.3 to pick a candidate gloss for a window of landmark
- * frames. Sends only the compact text description produced by
- * describeWindow; no landmark arrays or images leave the device.
+ * Ask muse-spark-1.3 to pick a candidate gloss for a precomputed window
+ * description (see describeWindow). Split from glossFromLandmarks so the
+ * caller can inspect the exact text sent to the model for debugging.
  *
  * When the description is too ambiguous for the model to decide within the
  * token cap (content null, finish_reason "length"), returns "unclear". That
  * is a first-class outcome: the caller shows "unclear sign, try again" and
  * does not speak or translate. It is never retried in a loop.
  *
- * @param {Array<Object>} frames window of LandmarkFrames
+ * @param {string} description output of describeWindow
  * @param {{apiKey: string, model?: string}} options
  * @returns {Promise<string>} gloss word, "FINGERSPELL:<letters>", or "unclear"
  */
-export async function glossFromLandmarks(frames, options) {
-  const description = describeWindow(frames);
+export async function glossFromDescription(description, options) {
   const { text } = await chatCompletion(
     [
       { role: "developer", content: GLOSS_SYSTEM },
@@ -441,6 +440,19 @@ export async function glossFromLandmarks(frames, options) {
   );
   if (text === null) return "unclear";
   return text.replace(/^["'\s]+|["'\s]+$/g, "").toLowerCase();
+}
+
+/**
+ * Convenience wrapper: describe the window, then recognize. Debug surfaces
+ * should call describeWindow + glossFromDescription directly so they can
+ * show the exact text sent to Muse.
+ *
+ * @param {Array<Object>} frames window of LandmarkFrames
+ * @param {{apiKey: string, model?: string}} options
+ * @returns {Promise<string>} gloss word, "FINGERSPELL:<letters>", or "unclear"
+ */
+export async function glossFromLandmarks(frames, options) {
+  return glossFromDescription(describeWindow(frames), options);
 }
 
 const ENGLISH_SYSTEM = [

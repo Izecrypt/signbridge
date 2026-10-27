@@ -11,7 +11,12 @@ import {
   drawFrame,
   startLandmarkPipeline,
 } from "./landmarks.js";
-import { glossFromLandmarks, glossToEnglish, speakEnglish } from "../api/muse.js";
+import {
+  describeWindow,
+  glossFromDescription,
+  glossToEnglish,
+  speakEnglish,
+} from "../api/muse.js";
 
 const WINDOW_INTERVAL_MS = 2000; // one recognition window every 2 seconds
 const MIN_FRAMES_PER_WINDOW = 8; // below this the window is too thin to read
@@ -28,6 +33,7 @@ const statusLine = document.getElementById("status-line");
 const museLine = document.getElementById("muse-line");
 const budgetLine = document.getElementById("budget-line");
 const transcriptList = document.getElementById("transcript");
+const debugList = document.getElementById("debug-list");
 const signedValue = document.getElementById("signed-value");
 const englishValue = document.getElementById("english-value");
 const cameraState = document.getElementById("camera-state");
@@ -99,6 +105,24 @@ function addTranscript(gloss, english) {
   }
 }
 
+// Debug surface: the exact text sent to Muse per window. Stays in the page
+// and the console only; nothing is transmitted anywhere.
+const MAX_DEBUG_ENTRIES = 10;
+
+function addDebugEntry(time, gloss, description) {
+  const item = document.createElement("li");
+  const header = document.createElement("div");
+  header.textContent = `${time} | ${gloss}`;
+  const body = document.createElement("pre");
+  body.textContent = description;
+  item.appendChild(header);
+  item.appendChild(body);
+  debugList.prepend(item);
+  while (debugList.children.length > MAX_DEBUG_ENTRIES) {
+    debugList.removeChild(debugList.lastChild);
+  }
+}
+
 async function runTranslateWindow() {
   if (!pipeline || !translateToggle.checked || inFlight) return;
   const apiKey = getApiKey();
@@ -111,9 +135,17 @@ async function runTranslateWindow() {
 
   inFlight = true;
   refreshMuseLine("thinking...");
+  const windowStart = new Date();
+  const description = describeWindow(frames);
   try {
-    const gloss = await glossFromLandmarks(frames, { apiKey });
+    const gloss = await glossFromDescription(description, { apiKey });
     museCalls += 1;
+    console.log("SB-DEBUG", {
+      time: windowStart.toISOString(),
+      gloss,
+      description,
+    });
+    addDebugEntry(windowStart.toLocaleTimeString(), gloss, description);
     if (gloss === "unclear") {
       // First-class outcome: ambiguous window. No translation, no speech,
       // counted separately. Never retried in a loop.
@@ -139,6 +171,12 @@ async function runTranslateWindow() {
     addTranscript(gloss, english);
     speakEnglish(english);
   } catch (err) {
+    console.log("SB-DEBUG", {
+      time: windowStart.toISOString(),
+      gloss: `error: ${err.message || err}`,
+      description,
+    });
+    addDebugEntry(windowStart.toLocaleTimeString(), `error: ${err.message || err}`, description);
     refreshMuseLine(`error: ${err.message || err}`);
   } finally {
     inFlight = false;
