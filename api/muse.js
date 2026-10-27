@@ -35,7 +35,18 @@ export class MuseError extends Error {
   }
 }
 
-async function chatCompletion(messages, { apiKey, model = DEFAULT_MODEL, maxTokens = 30 }) {
+/**
+ * Result of one chat completion. `text` is null when the model spent the
+ * whole token budget on reasoning (content null, finish_reason "length").
+ * That is a first-class outcome, not an error: it means the input was too
+ * ambiguous for the model to answer within the cap.
+ *
+ * @typedef {Object} CompletionResult
+ * @property {string|null} text
+ * @property {string} finishReason
+ */
+
+async function chatCompletion(messages, { apiKey, model = DEFAULT_MODEL, maxTokens = 512 }) {
   if (!apiKey) {
     throw new MuseError("no-key", "No API key. Paste it into the key field (session only).");
   }
@@ -54,6 +65,11 @@ async function chatCompletion(messages, { apiKey, model = DEFAULT_MODEL, maxToke
         messages,
         max_tokens: maxTokens,
         temperature: 0,
+        // muse-spark-1.3 always reasons before answering; minimal effort
+        // keeps trivial inputs to about 20 reasoning tokens while ambiguous
+        // inputs still burn the cap and return null content (mapped to
+        // "unclear" by the caller, never retried in a loop).
+        reasoning_effort: "minimal",
       }),
       signal: controller.signal,
     });
@@ -75,13 +91,10 @@ async function chatCompletion(messages, { apiKey, model = DEFAULT_MODEL, maxToke
   } catch {
     throw new MuseError("parse", "Muse returned a response that is not JSON.");
   }
-  const text = data.choices && data.choices[0] && data.choices[0].message
-    ? data.choices[0].message.content
-    : "";
-  if (!text || !text.trim()) {
-    throw new MuseError("parse", "Muse returned an empty completion.");
-  }
-  return text.trim();
+  const choice = data.choices && data.choices[0];
+  const finishReason = choice && choice.finish_reason ? choice.finish_reason : "unknown";
+  const content = choice && choice.message ? choice.message.content : null;
+  return { text: content && content.trim() ? content.trim() : null, finishReason };
 }
 
 // ---------------------------------------------------------------------------
@@ -89,6 +102,8 @@ async function chatCompletion(messages, { apiKey, model = DEFAULT_MODEL, maxToke
 // ---------------------------------------------------------------------------
 
 const WRIST = 0;
+// Fingers in anatomical order, thumb excluded from spread logic.
+const FINGER_ORDER = ["index", "middle", "ring", "pinky"];
 // Finger tips and the joint one step in from the tip.
 const FINGER_JOINTS = {
   thumb: { tip: 4, mid: 3 },
@@ -102,10 +117,58 @@ function dist2d(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+function round2(v) {
+  return Math.round(v * 100) / 100;
+}
+
 // Cheap extension heuristic: a finger counts as extended when its tip is
 // further from the wrist than the joint below the tip.
 function fingerExtended(hand, { tip, mid }) {
   return dist2d(hand[tip], hand[WRIST]) > dist2d(hand[mid], hand[WRIST]) * 1.05;
+}
+
+// Adjacent (index to pinky as one group) or split (gaps between extended
+// fingers, the ASL distinction behind letters like "C" vs "V" shapes).
+function spreadDescription(extended) {
+  const set = new Set(extended.filter((f) => f !== "thumb"));
+  const positions = FINGER_ORDER.map((f, i) => (set.has(f) ? i : -1)).filter((i) => i >= 0);
+  if (positions.length === 0) return "no fingers extended";
+  if (positions.length === 1) return "one finger extended";
+  const gaps = positions[positions.length - 1] - positions[0] + 1 - positions.length;
+  return gaps === 0 ? "extended fingers adjacent" : "extended fingers split";
+}
+
+// Back-and-forth count: direction reversals along the axis that moves most.
+// Two or more means the sign has a repeated or oscillating component.
+function reversalCount(points) {
+  let xReversals = 0;
+  let yReversals = 0;
+  let prevDx = 0;
+  let prevDy = 0;
+  for (let i = 1; i < points.length; i += 1) {
+    const dx = points[i].x - points[i - 1].x;
+    const dy = points[i].y - points[i - 1].y;
+    if (Math.abs(dx) > 0.004) {
+      if (prevDx !== 0 && Math.sign(dx) !== Math.sign(prevDx)) xReversals += 1;
+      prevDx = dx;
+    }
+    if (Math.abs(dy) > 0.004) {
+      if (prevDy !== 0 && Math.sign(dy) !== Math.sign(prevDy)) yReversals += 1;
+      prevDy = dy;
+    }
+  }
+  return Math.max(xReversals, yReversals);
+}
+
+function motionDescription(handFrames) {
+  const points = handFrames.map((h) => h[WRIST]);
+  const reversals = reversalCount(points);
+  const travel = dist2d(points[0], points[points.length - 1]);
+  if (reversals >= 2) {
+    return `repeated motion (${reversals} direction changes), travel ${round2(travel)}`;
+  }
+  if (travel > 0.05) return `moves across frame, travel ${round2(travel)}`;
+  return "mostly stationary";
 }
 
 function summarizeHand(handFrames, label) {
@@ -120,23 +183,19 @@ function summarizeHand(handFrames, label) {
   const extended = Object.entries(extendedCounts)
     .filter(([, c]) => c / n >= 0.5)
     .map(([f]) => f);
-  const first = handFrames[0][WRIST];
-  const last = handFrames[handFrames.length - 1][WRIST];
-  const travel = dist2d(first, last);
-  return {
-    label,
-    extended,
-    travel: Math.round(travel * 100) / 100,
-  };
+  return { label, extended };
 }
 
 /**
  * Turn a window of LandmarkFrames into compact text. This text, and only this
  * text, is what leaves the device for Muse. No images, no video, no raw
- * per-frame coordinates beyond these summaries.
+ * per-frame coordinates beyond these summaries. Coverage: per-hand visibility
+ * and extended-finger sets, finger spread (adjacent vs split), motion type
+ * (stationary, moving, or repeated with a reversal count), relative hand
+ * height, and approach vs separation between the two hands.
  *
  * @param {Array<import("../web/landmarks.js").LandmarkFrame>} frames
- * @returns {string}
+ * @returns {string} roughly 40 to 60 tokens
  */
 export function describeWindow(frames) {
   if (!frames || frames.length === 0) {
@@ -156,22 +215,41 @@ export function describeWindow(frames) {
     });
   }
 
-  const lines = [
-    `Sign window: ${frames.length} frames over ${seconds}s.`,
-  ];
+  const lines = [`Sign window: ${frames.length} frames over ${seconds}s.`];
   for (let i = 0; i < 2; i += 1) {
-    const summary = summarizeHand(bySlot[i], labels[i] || (i === 0 ? "hand-1" : "hand-2"));
+    const role = i === 0 ? "Dominant" : "Non-dominant";
+    const summary = summarizeHand(bySlot[i], labels[i] || `hand-${i + 1}`);
     if (!summary) {
-      lines.push(`${i === 0 ? "Dominant" : "Non-dominant"} hand: not visible.`);
+      lines.push(`${role} hand: not visible.`);
       continue;
     }
     const seenPct = Math.round((bySlot[i].length / frames.length) * 100);
+    const fingers = summary.extended.length ? summary.extended.join(" ") : "none";
     lines.push(
-      `${i === 0 ? "Dominant" : "Non-dominant"} hand (${summary.label}): ` +
-      `visible in ${seenPct}% of frames, extended fingers: ` +
-      (summary.extended.length ? summary.extended.join(" ") : "none") +
-      `, wrist travel ${summary.travel} of frame width.`
+      `${role} hand (${summary.label}): visible ${seenPct}%, extended: ${fingers}, ` +
+      `${spreadDescription(summary.extended)}, ${motionDescription(bySlot[i])}.`
     );
+  }
+
+  // Two-hand relations: approach vs separation and relative height.
+  const both = frames.filter((f) => f.hands.length >= 2);
+  if (both.length >= 3) {
+    const gaps = both.map((f) => dist2d(f.hands[0][WRIST], f.hands[1][WRIST]));
+    const deltaGap = gaps[gaps.length - 1] - gaps[0];
+    const avgY0 = both.reduce((s, f) => s + f.hands[0][WRIST].y, 0) / both.length;
+    const avgY1 = both.reduce((s, f) => s + f.hands[1][WRIST].y, 0) / both.length;
+    let move;
+    if (Math.abs(deltaGap) > 0.05) {
+      move = deltaGap < 0
+        ? `hands approach (gap ${round2(gaps[0])} to ${round2(gaps[gaps.length - 1])})`
+        : `hands separate (gap ${round2(gaps[0])} to ${round2(gaps[gaps.length - 1])})`;
+    } else {
+      move = "hands keep similar distance";
+    }
+    const height =
+      avgY0 < avgY1 - 0.03 ? "dominant higher" :
+      avgY0 > avgY1 + 0.03 ? "dominant lower" : "hands at similar height";
+    lines.push(`Two hands: ${move}, ${height}.`);
   }
   return lines.join("\n");
 }
@@ -196,20 +274,26 @@ const GLOSS_SYSTEM = [
  * frames. Sends only the compact text description produced by
  * describeWindow; no landmark arrays or images leave the device.
  *
+ * When the description is too ambiguous for the model to decide within the
+ * token cap (content null, finish_reason "length"), returns "unclear". That
+ * is a first-class outcome: the caller shows "unclear sign, try again" and
+ * does not speak or translate. It is never retried in a loop.
+ *
  * @param {Array<Object>} frames window of LandmarkFrames
  * @param {{apiKey: string, model?: string}} options
- * @returns {Promise<string>} gloss word or "FINGERSPELL:<letters>"
+ * @returns {Promise<string>} gloss word, "FINGERSPELL:<letters>", or "unclear"
  */
 export async function glossFromLandmarks(frames, options) {
   const description = describeWindow(frames);
-  const raw = await chatCompletion(
+  const { text } = await chatCompletion(
     [
       { role: "developer", content: GLOSS_SYSTEM },
       { role: "user", content: description },
     ],
-    { apiKey: options.apiKey, model: options.model, maxTokens: 30 }
+    { apiKey: options.apiKey, model: options.model }
   );
-  return raw.replace(/^["'\s]+|["'\s]+$/g, "").toLowerCase();
+  if (text === null) return "unclear";
+  return text.replace(/^["'\s]+|["'\s]+$/g, "").toLowerCase();
 }
 
 const ENGLISH_SYSTEM = [
@@ -222,20 +306,23 @@ const ENGLISH_SYSTEM = [
 
 /**
  * Convert a gloss (or FINGERSPELL value) to a spoken-style English sentence.
+ * Returns null if the model burned the token cap (ambiguous input); the
+ * caller can then fall back to speaking the raw gloss.
  *
  * @param {string} gloss
  * @param {{apiKey: string, model?: string}} options
- * @returns {Promise<string>}
+ * @returns {Promise<string|null>}
  */
 export async function glossToEnglish(gloss, options) {
-  const raw = await chatCompletion(
+  const { text } = await chatCompletion(
     [
       { role: "developer", content: ENGLISH_SYSTEM },
       { role: "user", content: gloss },
     ],
-    { apiKey: options.apiKey, model: options.model, maxTokens: 40 }
+    { apiKey: options.apiKey, model: options.model }
   );
-  return raw.replace(/^["'\s]+|["'\s]+$/g, "");
+  if (text === null) return null;
+  return text.replace(/^["'\s]+|["'\s]+$/g, "");
 }
 
 /**

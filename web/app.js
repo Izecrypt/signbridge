@@ -41,6 +41,7 @@ let statusTimer = 0;
 let translateTimer = 0;
 let inFlight = false;
 let museCalls = 0;
+let unclearCount = 0;
 
 // Key source: a value injected at serve time (window.SIGNBRIDGE_API_KEY) or
 // the session-only input field. Never persisted, never logged.
@@ -80,10 +81,13 @@ function refreshStatus() {
 
 function refreshMuseLine(state) {
   museLine.textContent = `Muse: ${state}`;
-}function refreshBudget() {
+}
+
+function refreshBudget() {
   budgetLine.textContent =
-    `Muse calls this session: ${museCalls}. Spark runs about $0.6 in and $2.4 out ` +
-    `per 1M tokens, so each call here is a tiny fraction of a cent.`;
+    `Muse calls this session: ${museCalls} (unclear: ${unclearCount}). Spark output is ` +
+    `about $2.4 per 1M tokens, so each call is well under a tenth of a cent; ` +
+    `a full demo session costs cents against the $150 credit.`;
 }
 
 function addTranscript(gloss, english) {
@@ -110,9 +114,25 @@ async function runTranslateWindow() {
   try {
     const gloss = await glossFromLandmarks(frames, { apiKey });
     museCalls += 1;
+    if (gloss === "unclear") {
+      // First-class outcome: ambiguous window. No translation, no speech,
+      // counted separately. Never retried in a loop.
+      unclearCount += 1;
+      refreshMuseLine("unclear sign, try again");
+      return;
+    }
     refreshMuseLine(`gloss: ${gloss} | translating...`);
     const english = await glossToEnglish(gloss, { apiKey });
     museCalls += 1;
+    if (english === null) {
+      // Model burned the cap on the translation step; speak the gloss itself.
+      refreshMuseLine(`gloss: ${gloss} | said: ${gloss} (fallback)`);
+      signedValue.textContent = gloss;
+      englishValue.textContent = gloss;
+      addTranscript(gloss, gloss);
+      speakEnglish(gloss);
+      return;
+    }
     refreshMuseLine(`gloss: ${gloss} | said: ${english}`);
     signedValue.textContent = gloss;
     englishValue.textContent = english;

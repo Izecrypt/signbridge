@@ -33,10 +33,17 @@ Do not put the key in any file, URL, or commit. `.env` is gitignored.
 
 1. Camera runs, landmarks stream into the queue at up to 15 fps.
 2. Every 2 seconds the app drains the queue into a window (at least 8 frames).
-3. `glossFromLandmarks` sends Muse a compact text description of that window: hand visibility percentage, which fingers stayed extended, wrist travel. No frames, no images, no raw per-frame coordinates.
-4. Muse Spark (muse-spark-1.3, temperature 0, max 30 tokens) replies with one gloss word from the fixed 40-sign coffee-shop vocabulary or `FINGERSPELL:<letters>`.
-5. `glossToEnglish` asks Spark for one short natural sentence (max 40 tokens).
+3. `glossFromLandmarks` sends Muse a compact text description of that window: per-hand visibility and extended-finger sets, finger spread (adjacent vs split), motion type (stationary, moving, or repeated with a reversal count), relative hand height, and approach vs separation between the two hands. No frames, no images, no raw per-frame coordinates.
+4. Muse Spark (muse-spark-1.3, temperature 0, reasoning_effort "minimal", max_tokens 512) replies with one gloss word from the fixed 40-sign coffee-shop vocabulary or `FINGERSPELL:<letters>`.
+5. `glossToEnglish` asks Spark for one short natural sentence.
 6. `speakEnglish` speaks it with the browser's built-in voice (on-device). The page shows gloss, sentence, and a running Muse call counter with cost context.
+
+## Muse behavior (verified in a live smoke test)
+
+- muse-spark-1.3 always generates reasoning tokens before visible output. Requests set `reasoning_effort: "minimal"` (about 20 reasoning tokens on trivial inputs) and `max_tokens: 512` so distinctive inputs always have headroom.
+- A distinctive window answers cleanly and fast (about 1 to 2 seconds, exact gloss).
+- An ambiguous window deliberates until the cap and returns `content: null` with `finish_reason: "length"`. The app maps this to "unclear": the status line shows "unclear sign, try again", nothing is spoken, and the call is counted separately. It is never retried in a loop, so worst case cost per unclear window is one capped call (about 3 seconds).
+- Expected cost per call is well under a tenth of a cent at Spark output pricing (about $2.4 per 1M tokens, and each call here is only a few hundred tokens). A full demo session costs cents against the $150 credit.
 
 ## Privacy note (known limitation of v1)
 
@@ -44,7 +51,7 @@ This slice sends a compact landmark-derived text description to Muse. That is wi
 
 ## Budget
 
-Spark pricing is roughly $0.6 in and $2.4 out per 1M tokens. One window costs about 2 calls of a few hundred tokens, so a busy demo session (a few hundred windows) lands in the cents. The page counts calls per session. muse-wonder-1.0 is not used ($4 in / $20 out per 1M). There is no hosted TTS; speech output is the browser voice.
+Spark pricing is roughly $0.6 in and $2.4 out per 1M tokens. One recognized window costs about 2 calls of a few hundred tokens (well under a tenth of a cent); an unclear window costs one capped call (about 512 tokens, still a tiny fraction of a cent). A busy demo session lands in the cents against the $150 credit. The page counts calls per session, including unclear ones separately. muse-wonder-1.0 is not used ($4 in / $20 out per 1M). There is no hosted TTS; speech output is the browser voice.
 
 ## Manual verification checklist
 
@@ -65,5 +72,6 @@ Live translate (paste a valid key first):
 10. The Conversation panel shows the gloss under "What I signed" and the sentence under "English output", and the transcript list grows.
 11. The call counter increases by 2 per recognized window and the budget line stays plausible.
 12. Sign something outside the vocabulary. The expected output is `FINGERSPELL:<letters>` more often than a wrong vocabulary word.
-13. Network tab while translating: only POSTs to `api.meta.ai/v1/chat/completions`, request payloads contain text descriptions only (readable in devtools), nothing else leaves the browser.
-14. Bad key on purpose: the Muse line shows a clean error (HTTP 401 mapped), the app keeps running and keeps trying the next window.
+13. Wave your hand vaguely or sign nothing distinctive. The Muse line should show "unclear sign, try again" within about 3 seconds, nothing is spoken, and the unclear counter in the budget line goes up by one.
+14. Network tab while translating: only POSTs to `api.meta.ai/v1/chat/completions`, request payloads contain text descriptions only (readable in devtools), nothing else leaves the browser.
+15. Bad key on purpose: the Muse line shows a clean error (HTTP 401 mapped), the app keeps running and keeps trying the next window.
