@@ -5,6 +5,7 @@ The only module allowed to call model APIs.
 - `muse.js` - browser module, plain fetch, no build step. Talks to the Meta Model API (OpenAI-compatible, base URL `https://api.meta.ai/v1`, POST /chat/completions).
   - `glossFromLandmarks(frames, { apiKey, model })` - describes a window of landmark frames on-device and asks muse-spark-1.3 for one coffee-shop gloss word or `FINGERSPELL:<letters>`. Ambiguous windows (content null, finish_reason "length") return "unclear", a first-class outcome, never an error or a retry loop.
   - `glossToEnglish(gloss, { apiKey, model })` - one short natural English sentence from a gloss.
+  - `wordFromLetters(letters, { apiKey, model })` - assemble a fingerspelled letter sequence into the single most likely English word, or the raw sequence if no word forms. Used on spelling-buffer flush.
   - `speakEnglish(text)` - browser speechSynthesis, on-device, free. There is no hosted TTS.
   - `describeWindow(frames)` - the on-device text description builder (exported for testing).
   - `transcribe` / `englishToGloss` - Direction B stubs, not implemented.

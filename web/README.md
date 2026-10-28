@@ -32,11 +32,13 @@ Do not put the key in any file, URL, or commit. `.env` is gitignored.
 ## End-to-end flow (Live translate)
 
 1. Camera runs, landmarks stream into the queue at up to 15 fps.
-2. Every 2 seconds the app drains the queue into a window (at least 8 frames).
-3. `glossFromLandmarks` sends Muse a compact text description of that window: per-hand visibility and extended-finger sets, finger spread (adjacent vs split), motion type (stationary, moving, or repeated with a reversal count), letter-shape features (curl depth per finger as extended / half / tucked, thumb position class alongside / across / between / folded over palm, fingertip clustering, pointing direction), relative hand height, and approach vs separation between the two hands. No frames, no images, no raw per-frame coordinates.
-4. Muse Spark (muse-spark-1.3, temperature 0, reasoning_effort "minimal", max_tokens 512) replies with one gloss word from the fixed 40-sign coffee-shop vocabulary or `FINGERSPELL:<letters>`.
-5. `glossToEnglish` asks Spark for one short natural sentence.
-6. `speakEnglish` speaks it with the browser's built-in voice (on-device). The page shows gloss, sentence, and a running Muse call counter with cost context.
+2. Every 1.5 seconds the app drains the queue into a window (at least 6 frames).
+3. `glossFromDescription` sends Muse the compact window description (see the debug panel for the exact text).
+4. Muse Spark (muse-spark-1.3, temperature 0, reasoning_effort "minimal", max_tokens 512) replies with one gloss word from the fixed 40-sign coffee-shop vocabulary, `FINGERSPELL:<letter>`, or burns the cap and the app shows "unclear sign, try again".
+5. Vocabulary gloss: interrupt any spelling in progress, translate with `glossToEnglish`, speak the sentence with the browser voice.
+6. Letter: append to the spelling buffer (deduped against the last letter, so a held letter is not double-appended) and show "spelled so far: ...". A pause of 2.5s with no new letter ends the word: 2+ letters go to `wordFromLetters` ("water" becomes the spoken word "water", "xyzq" stays "xyzq"), a single letter is spoken as the letter itself.
+
+Fingerspelling is a sequence task: isolated letters like D vs 1 vs pointing are undecidable alone, so single-letter fallback to unclear is correct behavior. Letters only resolve at word level, which is why the buffer exists.
 
 ## Muse behavior (verified in a live smoke test)
 
@@ -75,7 +77,14 @@ Live translate (paste a valid key first):
 13. Wave your hand vaguely or sign nothing distinctive. The Muse line should show "unclear sign, try again" within about 3 seconds, nothing is spoken, and the unclear counter in the budget line goes up by one.
 14. Network tab while translating: only POSTs to `api.meta.ai/v1/chat/completions`, request payloads contain text descriptions only (readable in devtools), nothing else leaves the browser.
 15. Bad key on purpose: the Muse line shows a clean error (HTTP 401 mapped), the app keeps running and keeps trying the next window.
-16. The "Debug (last 10 windows)" panel under the camera shows one entry per attempt: time, gloss (or unclear / error), and the exact description text sent to Muse. The same lines appear in the devtools console prefixed `SB-DEBUG`.
+16. The "Debug (last 10 windows)" panel under the camera shows one entry per attempt: time, gloss (or unclear / error), the letters buffer state at that moment, and the exact description text sent to Muse. The same lines appear in the devtools console prefixed `SB-DEBUG`.
+
+## Fingerspelling test
+
+1. Fingerspell W-A-T-E-R, holding each letter about a second, with a clear pause (hand lowered or still) of about a second between letters. The Muse line should grow "spelled so far: w", "wa", "wat", ... and after the final pause speak "water".
+2. Fingerspell something with no word form (like X-Y-Z-Q). After the pause it should speak the raw sequence "xyzq".
+3. Immediately after a letter sequence, do a vocabulary sign (for example "water" or "hello"). The buffer must flush without speaking the letters, and the vocabulary path speaks the sentence.
+4. Hold one letter steady for 4+ seconds. It must appear exactly once in "spelled so far" (dedupe), and after the pause only the single letter is spoken.
 
 ## Tuning workflow
 

@@ -16,10 +16,13 @@ import {
   glossFromDescription,
   glossToEnglish,
   speakEnglish,
+  wordFromLetters,
 } from "../api/muse.js";
+import { createSpellingBuffer } from "./spelling.js";
 
-const WINDOW_INTERVAL_MS = 2000; // one recognition window every 2 seconds
-const MIN_FRAMES_PER_WINDOW = 8; // below this the window is too thin to read
+const WINDOW_INTERVAL_MS = 1500; // one recognition window every 1.5 seconds
+const MIN_FRAMES_PER_WINDOW = 6; // below this the window is too thin to read
+const SPELLING_PAUSE_MS = 2500; // pause that ends a fingerspelled word
 
 const video = document.getElementById("webcam");
 const canvas = document.getElementById("overlay");
@@ -109,10 +112,12 @@ function addTranscript(gloss, english) {
 // and the console only; nothing is transmitted anywhere.
 const MAX_DEBUG_ENTRIES = 10;
 
-function addDebugEntry(time, gloss, description) {
+function addDebugEntry(time, gloss, description, letters) {
   const item = document.createElement("li");
   const header = document.createElement("div");
-  header.textContent = `${time} | ${gloss}`;
+  header.textContent = letters
+    ? `${time} | ${gloss} | letters: ${letters}`
+    : `${time} | ${gloss}`;
   const body = document.createElement("pre");
   body.textContent = description;
   item.appendChild(header);
@@ -122,6 +127,37 @@ function addDebugEntry(time, gloss, description) {
     debugList.removeChild(debugList.lastChild);
   }
 }
+
+// Fingerspelling state: letters accumulate across windows, a pause ends the
+// word, a vocabulary gloss interrupts. Flush speaks the assembled word.
+const spellingBuffer = createSpellingBuffer({
+  resetMs: SPELLING_PAUSE_MS,
+  onFlush: async (sequence, kind) => {
+    try {
+      if (kind === "letter") {
+        refreshMuseLine(`spelled: ${sequence}`);
+        signedValue.textContent = sequence;
+        englishValue.textContent = sequence;
+        addTranscript(sequence, sequence);
+        speakEnglish(sequence);
+        return;
+      }
+      const apiKey = getApiKey();
+      refreshMuseLine(`spelled: ${sequence} | assembling word...`);
+      const word = apiKey ? await wordFromLetters(sequence, { apiKey }) : sequence;
+      if (apiKey) museCalls += 1;
+      refreshMuseLine(`spelled: ${word}`);
+      signedValue.textContent = sequence;
+      englishValue.textContent = word;
+      addTranscript(sequence, word);
+      speakEnglish(word);
+    } catch (err) {
+      refreshMuseLine(`spelling error: ${err.message || err}`);
+    } finally {
+      refreshBudget();
+    }
+  },
+});
 
 async function runTranslateWindow() {
   if (!pipeline || !translateToggle.checked || inFlight) return;
@@ -140,19 +176,31 @@ async function runTranslateWindow() {
   try {
     const gloss = await glossFromDescription(description, { apiKey });
     museCalls += 1;
+    const lettersSnapshot = spellingBuffer.snapshot();
     console.log("SB-DEBUG", {
       time: windowStart.toISOString(),
       gloss,
+      letters: lettersSnapshot,
       description,
     });
-    addDebugEntry(windowStart.toLocaleTimeString(), gloss, description);
+    addDebugEntry(windowStart.toLocaleTimeString(), gloss, description, lettersSnapshot);
     if (gloss === "unclear") {
       // First-class outcome: ambiguous window. No translation, no speech,
-      // counted separately. Never retried in a loop.
+      // counted separately. Never retried in a loop. Does not touch the
+      // spelling buffer: unclear windows are normal between letters.
       unclearCount += 1;
       refreshMuseLine("unclear sign, try again");
       return;
     }
+    const spelled = /^fingerspell:([a-z])$/.exec(gloss);
+    if (spelled) {
+      // Letter path: buffer it (dedupes held letters), show progress.
+      const soFar = spellingBuffer.pushLetter(spelled[1]);
+      refreshMuseLine(`spelled so far: ${soFar}`);
+      return;
+    }
+    // Vocabulary path: a sign interrupts fingerspelling.
+    spellingBuffer.interrupt();
     refreshMuseLine(`gloss: ${gloss} | translating...`);
     const english = await glossToEnglish(gloss, { apiKey });
     museCalls += 1;
@@ -171,12 +219,14 @@ async function runTranslateWindow() {
     addTranscript(gloss, english);
     speakEnglish(english);
   } catch (err) {
+    const lettersAtError = spellingBuffer.snapshot();
     console.log("SB-DEBUG", {
       time: windowStart.toISOString(),
       gloss: `error: ${err.message || err}`,
+      letters: lettersAtError,
       description,
     });
-    addDebugEntry(windowStart.toLocaleTimeString(), `error: ${err.message || err}`, description);
+    addDebugEntry(windowStart.toLocaleTimeString(), `error: ${err.message || err}`, description, lettersAtError);
     refreshMuseLine(`error: ${err.message || err}`);
   } finally {
     inFlight = false;
@@ -219,6 +269,7 @@ stopButton.addEventListener("click", () => {
   }
   window.clearInterval(statusTimer);
   window.clearInterval(translateTimer);
+  spellingBuffer.dispose();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   setRunning(false);
   refreshStatus();

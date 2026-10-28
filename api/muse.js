@@ -413,6 +413,7 @@ const GLOSS_SYSTEM = [
   "(2) FINGERSPELL:<letters> when the motion does not confidently match any vocabulary sign.",
   LETTER_CUES,
   "Rules: output the gloss or the FINGERSPELL value only, lowercase, no punctuation, no quotes, no explanation.",
+  "Shape hints: index extended with the other fingers tucked and held still is most likely the letter D or the number 1; pinky-only upright is the letter I.",
   "If unsure, always prefer FINGERSPELL over guessing a vocabulary word, and prefer FINGERSPELL over unclear.",
 ].join(" ");
 
@@ -462,6 +463,34 @@ const ENGLISH_SYSTEM = [
   "For FINGERSPELL:<letters>, build the sentence around the spelled word.",
   "No quotes, no explanation.",
 ].join(" ");
+
+const WORD_SYSTEM = [
+  "You turn a sequence of fingerspelled letters into the single most likely English word.",
+  "Input is 2 to 8 lowercase letters with no separator.",
+  "Prefer common short words (names, drinks, food, everyday nouns) when the letters allow several words.",
+  "If the letters do not form a plausible word, output the letters themselves as one lowercase string.",
+  "Rules: output one lowercase word only, no punctuation, no quotes, no explanation.",
+].join(" ");
+
+/**
+ * Assemble a word from a buffered letter sequence (fingerspelling flush).
+ * Falls back to the raw letter sequence if the model burns the token cap.
+ *
+ * @param {string} letters concatenated letters, e.g. "water"
+ * @param {{apiKey: string, model?: string}} options
+ * @returns {Promise<string>}
+ */
+export async function wordFromLetters(letters, options) {
+  const { text } = await chatCompletion(
+    [
+      { role: "developer", content: WORD_SYSTEM },
+      { role: "user", content: letters },
+    ],
+    { apiKey: options.apiKey, model: options.model }
+  );
+  if (text === null) return letters;
+  return text.replace(/^["'\s]+|["'\s]+$/g, "").toLowerCase();
+}
 
 /**
  * Convert a gloss (or FINGERSPELL value) to a spoken-style English sentence.
