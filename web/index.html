@@ -104,6 +104,9 @@
       color: var(--muted);
       font: inherit;
     }
+    .letter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.4rem; margin-top: 0.75rem; }
+    .letter-cell { background: var(--soft); border: 1px solid var(--line); border-radius: 0.5rem; padding: 0.45rem 0.55rem; font-size: 0.78rem; line-height: 1.35; }
+    .letter-cell b { color: var(--accent); margin-right: 0.3rem; }
     @media (max-width: 760px) {
       .topbar { align-items: flex-start; flex-direction: column; }
       .layout { grid-template-columns: 1fr; }
@@ -185,6 +188,12 @@
         </div>
 
         <details class="card">
+          <summary><h2 style="display: inline;">Practice the alphabet (fingerspelling)</h2></summary>
+          <p class="hint">Hold each letter as still as you can for about a second, pause about a second between letters. Two or more letters in a row are read as one word and spoken aloud.</p>
+          <div id="letter-guide" class="letter-grid"></div>
+        </details>
+
+        <details class="card">
           <summary><h2 style="display: inline;">Debug (last 10 windows)</h2></summary>
           <ul id="debug-list"></ul>
           <p class="hint">Exactly what Muse received for each window, kept in this page only. Nothing here is sent anywhere. The same lines go to the devtools console prefixed SB-DEBUG.</p>
@@ -195,6 +204,45 @@
     <p class="note">The first run downloads MediaPipe models from the CDN and may take 10 to 30 seconds. Webcam access requires localhost or HTTPS.</p>
   </main>
 
+  <script type="module">
+    const LETTER_SHAPES = [
+      ["a", "fist, thumb resting on the side"],
+      ["b", "flat palm up, thumb folded across"],
+      ["c", "hand curved into a C"],
+      ["d", "index up, thumb touches middle finger"],
+      ["e", "fingers curled, fingertips tucked under"],
+      ["f", "index and thumb in a circle, others up"],
+      ["g", "fist, thumb and index pointing sideways"],
+      ["h", "index and middle together, pointing sideways"],
+      ["i", "fist with pinky up"],
+      ["j", "pinky up, draw a J in the air"],
+      ["k", "index and middle in a V, thumb between"],
+      ["l", "index up, thumb out to the side"],
+      ["m", "thumb folded across three fingers"],
+      ["n", "thumb folded across two fingers"],
+      ["o", "rounded closed fist"],
+      ["p", "like K but pointing down"],
+      ["q", "like G but pointing down"],
+      ["r", "index and middle up, crossed"],
+      ["s", "fist, thumb across the front"],
+      ["t", "thumb tip between index and middle"],
+      ["u", "index and middle up, together"],
+      ["v", "index and middle up, split"],
+      ["w", "index, middle, ring up, thumb holds pinky"],
+      ["x", "index finger hooked"],
+      ["y", "thumb and pinky out, rest folded"],
+      ["z", "index pointing out, draw a Z in the air"],
+    ];
+    const guide = document.getElementById("letter-guide");
+    for (const [letter, shape] of LETTER_SHAPES) {
+      const cell = document.createElement("div");
+      cell.className = "letter-cell";
+      const b = document.createElement("b");
+      b.textContent = letter.toUpperCase();
+      cell.append(b, document.createTextNode(shape));
+      guide.appendChild(cell);
+    }
+  </script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
