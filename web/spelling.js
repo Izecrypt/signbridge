@@ -61,7 +61,7 @@ export function createSpellingBuffer(options = {}) {
       letters = [];
       lastLetter = null;
     },
-    /** Current buffer contents for debug display. */
+    /** Current buffer contents for the live spelling status. */
     snapshot() {
       return letters.join("");
     },

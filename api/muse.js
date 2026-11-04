@@ -421,7 +421,7 @@ const GLOSS_SYSTEM = [
 /**
  * Ask muse-spark-1.3 to pick a candidate gloss for a precomputed window
  * description (see describeWindow). Split from glossFromLandmarks so the
- * caller can inspect the exact text sent to the model for debugging.
+ * caller can build and send a compact description independently.
  *
  * When the description is too ambiguous for the model to decide within the
  * token cap (content null, finish_reason "length"), returns "unclear". That
