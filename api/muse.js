@@ -410,11 +410,12 @@ const GLOSS_SYSTEM = [
   "It never contains images or video.",
   "Reply with exactly one of:",
   "(1) one gloss word from this fixed vocabulary: " + VOCABULARY.join(", ") + ";",
-  "(2) FINGERSPELL:<letters> when the motion does not confidently match any vocabulary sign.",
+  "(2) FINGERSPELL:<one lowercase letter> only when the hand shape clearly matches one letter;",
+  "(3) unclear when no sign or letter is clear enough to identify.",
   LETTER_CUES,
   "Rules: output the gloss or the FINGERSPELL value only, lowercase, no punctuation, no quotes, no explanation.",
   "Shape hints: index extended with the other fingers tucked and held still is most likely the letter D or the number 1; pinky-only upright is the letter I.",
-  "If unsure, always prefer FINGERSPELL over guessing a vocabulary word, and prefer FINGERSPELL over unclear.",
+  "If unsure between a vocabulary sign and a letter, reply unclear. Do not guess.",
 ].join(" ");
 
 /**
@@ -440,7 +441,11 @@ export async function glossFromDescription(description, options) {
     { apiKey: options.apiKey, model: options.model }
   );
   if (text === null) return "unclear";
-  return text.replace(/^["'\s]+|["'\s]+$/g, "").toLowerCase();
+  const normalized = text.replace(/^["'\s]+|["'\s]+$/g, "").toLowerCase();
+  if (VOCABULARY.includes(normalized) || /^fingerspell:[a-z]$/.test(normalized)) {
+    return normalized;
+  }
+  return "unclear";
 }
 
 /**
@@ -489,7 +494,8 @@ export async function wordFromLetters(letters, options) {
     { apiKey: options.apiKey, model: options.model }
   );
   if (text === null) return letters;
-  return text.replace(/^["'\s]+|["'\s]+$/g, "").toLowerCase();
+  const normalized = text.replace(/^["'\s]+|["'\s]+$/g, "").toLowerCase();
+  return /^[a-z]{2,8}$/.test(normalized) ? normalized : letters;
 }
 
 /**
@@ -510,7 +516,8 @@ export async function glossToEnglish(gloss, options) {
     { apiKey: options.apiKey, model: options.model }
   );
   if (text === null) return null;
-  return text.replace(/^["'\s]+|["'\s]+$/g, "");
+  const normalized = text.replace(/^["'\s]+|["'\s]+$/g, "");
+  return normalized.split(/\s+/).length <= 12 ? normalized : null;
 }
 
 /**

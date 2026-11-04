@@ -59,9 +59,15 @@ export async function startCamera(videoElement, constraints = {}) {
     },
     audio: false,
   });
-  videoElement.srcObject = stream;
-  await videoElement.play();
-  return stream;
+  try {
+    videoElement.srcObject = stream;
+    await videoElement.play();
+    return stream;
+  } catch (err) {
+    stopCamera(stream);
+    if (videoElement.srcObject === stream) videoElement.srcObject = null;
+    throw err;
+  }
 }
 
 /** Stop a camera stream returned by startCamera. */
@@ -70,22 +76,44 @@ export function stopCamera(stream) {
   for (const track of stream.getTracks()) track.stop();
 }
 
+async function createLandmarkersForDelegate(vision, enablePose, delegate) {
+  let hand = null;
+  let pose = null;
+  try {
+    hand = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: { modelAssetPath: HAND_MODEL_URL, delegate },
+      runningMode: "VIDEO",
+      numHands: 2,
+    });
+    if (enablePose) {
+      pose = await PoseLandmarker.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate },
+        runningMode: "VIDEO",
+        numPoses: 1,
+      });
+    }
+    return { hand, pose };
+  } catch (err) {
+    if (pose) pose.close();
+    if (hand) hand.close();
+    throw err;
+  }
+}
+
 async function createLandmarkers(enablePose) {
   const vision = await FilesetResolver.forVisionTasks(WASM_URL);
-  const hand = await HandLandmarker.createFromOptions(vision, {
-    baseOptions: { modelAssetPath: HAND_MODEL_URL, delegate: "GPU" },
-    runningMode: "VIDEO",
-    numHands: 2,
-  });
-  let pose = null;
-  if (enablePose) {
-    pose = await PoseLandmarker.createFromOptions(vision, {
-      baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate: "GPU" },
-      runningMode: "VIDEO",
-      numPoses: 1,
-    });
+  try {
+    return await createLandmarkersForDelegate(vision, enablePose, "GPU");
+  } catch (gpuError) {
+    try {
+      return await createLandmarkersForDelegate(vision, enablePose, "CPU");
+    } catch (cpuError) {
+      throw new Error(
+        "MediaPipe initialization failed on GPU (" + gpuError.message +
+        ") and CPU (" + cpuError.message + ")."
+      );
+    }
   }
-  return { hand, pose };
 }
 
 /**
@@ -109,7 +137,15 @@ export async function startLandmarkPipeline(videoElement, onFrame, options = {})
     stream = videoElement.srcObject;
   }
 
-  const { hand, pose } = await createLandmarkers(enablePose);
+  let landmarkers;
+  try {
+    landmarkers = await createLandmarkers(enablePose);
+  } catch (err) {
+    stopCamera(stream);
+    if (videoElement.srcObject === stream) videoElement.srcObject = null;
+    throw err;
+  }
+  const { hand, pose } = landmarkers;
 
   const minIntervalMs = 1000 / maxFps;
   const stats = {

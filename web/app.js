@@ -22,7 +22,7 @@ import { createSpellingBuffer } from "./spelling.js";
 
 const WINDOW_INTERVAL_MS = 1500; // one recognition window every 1.5 seconds
 const MIN_FRAMES_PER_WINDOW = 6; // below this the window is too thin to read
-const SPELLING_PAUSE_MS = 2500; // pause that ends a fingerspelled word
+const SPELLING_PAUSE_MS = 4500; // allows for model latency between recognized letters
 
 const video = document.getElementById("webcam");
 const canvas = document.getElementById("overlay");
@@ -36,7 +36,6 @@ const statusLine = document.getElementById("status-line");
 const museLine = document.getElementById("muse-line");
 const budgetLine = document.getElementById("budget-line");
 const transcriptList = document.getElementById("transcript");
-const debugList = document.getElementById("debug-list");
 const signedValue = document.getElementById("signed-value");
 const englishValue = document.getElementById("english-value");
 const cameraState = document.getElementById("camera-state");
@@ -93,10 +92,7 @@ function refreshMuseLine(state) {
 }
 
 function refreshBudget() {
-  budgetLine.textContent =
-    `Muse calls this session: ${museCalls} (unclear: ${unclearCount}). Spark output is ` +
-    `about $2.4 per 1M tokens, so each call is well under a tenth of a cent; ` +
-    `a full demo session costs cents against the $150 credit.`;
+  budgetLine.textContent = "Muse calls this session: " + museCalls + " (unclear: " + unclearCount + ").";
 }
 
 function addTranscript(gloss, english) {
@@ -105,26 +101,6 @@ function addTranscript(gloss, english) {
   transcriptList.prepend(item);
   while (transcriptList.children.length > 6) {
     transcriptList.removeChild(transcriptList.lastChild);
-  }
-}
-
-// Debug surface: the exact text sent to Muse per window. Stays in the page
-// and the console only; nothing is transmitted anywhere.
-const MAX_DEBUG_ENTRIES = 10;
-
-function addDebugEntry(time, gloss, description, letters) {
-  const item = document.createElement("li");
-  const header = document.createElement("div");
-  header.textContent = letters
-    ? `${time} | ${gloss} | letters: ${letters}`
-    : `${time} | ${gloss}`;
-  const body = document.createElement("pre");
-  body.textContent = description;
-  item.appendChild(header);
-  item.appendChild(body);
-  debugList.prepend(item);
-  while (debugList.children.length > MAX_DEBUG_ENTRIES) {
-    debugList.removeChild(debugList.lastChild);
   }
 }
 
@@ -171,24 +147,15 @@ async function runTranslateWindow() {
 
   inFlight = true;
   refreshMuseLine("thinking...");
-  const windowStart = new Date();
   const description = describeWindow(frames);
   try {
     const gloss = await glossFromDescription(description, { apiKey });
     museCalls += 1;
-    const lettersSnapshot = spellingBuffer.snapshot();
-    console.log("SB-DEBUG", {
-      time: windowStart.toISOString(),
-      gloss,
-      letters: lettersSnapshot,
-      description,
-    });
-    addDebugEntry(windowStart.toLocaleTimeString(), gloss, description, lettersSnapshot);
     if (gloss === "unclear") {
-      // First-class outcome: ambiguous window. No translation, no speech,
-      // counted separately. Never retried in a loop. Does not touch the
-      // spelling buffer: unclear windows are normal between letters.
+      // Ambiguous windows are counted without translation or speech. A gap
+      // lets the next identical letter be counted without ending the word.
       unclearCount += 1;
+      if (spellingBuffer.snapshot()) spellingBuffer.noteGap();
       refreshMuseLine("unclear sign, try again");
       return;
     }
@@ -219,14 +186,6 @@ async function runTranslateWindow() {
     addTranscript(gloss, english);
     speakEnglish(english);
   } catch (err) {
-    const lettersAtError = spellingBuffer.snapshot();
-    console.log("SB-DEBUG", {
-      time: windowStart.toISOString(),
-      gloss: `error: ${err.message || err}`,
-      letters: lettersAtError,
-      description,
-    });
-    addDebugEntry(windowStart.toLocaleTimeString(), `error: ${err.message || err}`, description, lettersAtError);
     refreshMuseLine(`error: ${err.message || err}`);
   } finally {
     inFlight = false;
@@ -237,6 +196,8 @@ async function runTranslateWindow() {
 startButton.addEventListener("click", async () => {
   clearError();
   startButton.disabled = true;
+  cameraState.textContent = "Starting";
+  statusLine.textContent = "Opening camera and loading hand models...";
   try {
     const sizeCanvas = () => {
       canvas.width = video.videoWidth || 640;
@@ -259,6 +220,7 @@ startButton.addEventListener("click", async () => {
   } catch (err) {
     showError(`Could not start: ${err.message || err}`);
     setRunning(false);
+    refreshStatus();
   }
 });
 

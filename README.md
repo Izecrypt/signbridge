@@ -1,32 +1,41 @@
-# SignBridge
+# SignBridge, sign-to-voice prototype
 
-Two-way sign language translator (ASL) for the Meta Global AI Developer Hackathon, indie track.
-
-Roughly 70M Deaf people use a sign language as their primary language, and ASL is not English (own grammar, topic-comment order, spatial referencing). SignBridge bridges both directions of a conversation in a constrained domain (a coffee shop, about 150 signs), as an accessibility tool for everyday transactions, not an interpreter replacement.
+SignBridge is an experimental ASL sign-to-voice prototype for low-stakes coffee-shop interactions. Recognition may be wrong. The current build is not a general ASL translator, and its recognition accuracy has not been independently validated.
 
 ## Direction A: Sign to Voice
 
 ```
-webcam -> MediaPipe landmarks (on-device) -> temporal model
-  -> sign gloss -> Muse Spark: gloss to English -> browser speechSynthesis
+webcam -> MediaPipe hand landmarks (on-device) -> 1.5-second windows
+  -> compact geometric description -> Muse Spark candidate gloss or letter
+  -> spelling buffer / short English output -> browser speechSynthesis
 ```
 
-Raw video never leaves the device. Only structured landmarks and motion descriptions go to the API. Fingerspelling covers out-of-vocabulary signs.
+Raw video never leaves the device. Only a compact text description derived from landmarks is sent to Meta when Live translate is enabled. The current recognition vocabulary has 40 entries, with a single-letter fingerspelling path. There is no trained temporal sign model.
+
+Use this prototype only for low-stakes demonstration. Do not rely on it for urgent, safety-critical, medical, legal, or other high-consequence communication.
 
 ## Design notes (updated from the original concept)
 
-- There is no hosted text-to-speech in the Meta Model API, so spoken output uses the browser's built-in speechSynthesis (on-device, free). `muse-wonder-1.0` is expensive ($4 in / $20 out per 1M tokens) and stays off the demo loop.
+- Spoken output uses the browser's built-in speechSynthesis on-device.
 - Speech-to-text for Direction B will use `muse-voice-transcribe-1.0` (POST /v1/asr/transcribe), not Wonder.
-- SAM 3.1 signer isolation is not needed: MediaPipe landmarks are the input path and stay that way.
+- SAM 3.1 signer isolation is not part of this prototype.
 
-## Direction B: Voice to Sign
+## Not implemented
 
 ```
 microphone -> Muse Voice Transcribe STT -> Muse Spark: English to ASL gloss
   -> Three.js avatar performs dictionary signs (SignBank)
 ```
 
-The rigged avatar performs signs with motion interpolation and facial grammar. Generative video cannot do accurate hand articulation, so it is used only for avatar appearance and branding.
+Voice-to-sign, the avatar, SAM signer isolation, a trained temporal recognition model, and a curated 150-sign dictionary are not in this build. The planned voice-to-sign architecture is documented in Architecture.md; its modules remain stubs.
+
+## Checks
+
+Run the dependency-free unit checks with Node.js:
+
+```sh
+node --experimental-default-type=module --test web/spelling.test.js api/muse.test.js
+```
 
 ## Quickstart
 

@@ -2,7 +2,7 @@
 
 **Project:** SignBridge, a two-way sign language translator (ASL)
 **Event:** Meta Global AI Developer Hackathon, indie track
-**Status:** Approved 2026-10-26, build window ends Nov 4, 21:00 ET (Nov 5, 02:00 WAT)
+**Status:** Approved 2026-10-26, official submission deadline Nov 4, 21:00 ET (Nov 5, 03:00 WAT)
 **Source of truth:** `2026-10-26_signbridge-concept.md` (vault inbox brief)
 
 ## Problem

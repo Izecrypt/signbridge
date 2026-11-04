@@ -9,7 +9,7 @@
  * @param {{resetMs?: number, onFlush?: (sequence: string, kind: "letter"|"word") => void}} options
  */
 export function createSpellingBuffer(options = {}) {
-  const { resetMs = 2500, onFlush } = options;
+  const { resetMs = 4500, onFlush } = options;
   let letters = [];
   let lastLetter = null;
   let timer = null;
@@ -47,6 +47,13 @@ export function createSpellingBuffer(options = {}) {
       }
       arm();
       return letters.join("");
+    },
+    /**
+     * A quiet or unclear recognition window separates repeated letters
+     * (for example the two Ls in HELLO) without ending the whole word.
+     */
+    noteGap() {
+      lastLetter = null;
     },
     /** Vocabulary gloss interrupted spelling: discard without speaking. */
     interrupt() {

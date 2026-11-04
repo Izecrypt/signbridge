@@ -28,8 +28,8 @@ One-page reference. Full detail in `Architecture.md` and `PRD.md`.
 
 ## Commands
 
-None yet beyond git. No build tool, no dependencies installed. Bundler (Vite) is planned but not set up.
+No build step. Run logic tests with `node --experimental-default-type=module --test web/spelling.test.js api/muse.test.js`. Serve locally with `python3 -m http.server 8080 --bind 127.0.0.1`; open `http://127.0.0.1:8080/web/`.
 
 ## Current state
 
-Direction A v1 is live end to end: webcam -> MediaPipe landmarks (on-device) -> 2s windows -> compact text description -> muse-spark-1.3 gloss (or FINGERSPELL) -> English sentence -> browser speech. Direction B, the temporal model on WLASL / MS-ASL, and the avatar are not started. Key facts: base URL https://api.meta.ai/v1 (OpenAI-compatible), model muse-spark-1.3, 3000 RPM / 4M TPM per team, no hosted TTS (speechSynthesis instead, on-device).
+The local prototype path is implemented: webcam -> MediaPipe hand landmarks (optional upper-body pose) -> 1.5-second windows -> compact geometric text description -> Muse Spark candidate gloss or single-letter fingerspelling -> spelling buffer / English phrase -> browser speech. No trained temporal sign model, SAM signer isolation, 150-sign dictionary, or voice-to-sign avatar is implemented. Recognition accuracy and live Muse behavior still require an owner-run, camera-in-frame session with a valid session-only API key. Base URL: https://api.meta.ai/v1; model: muse-spark-1.3; speech uses browser speechSynthesis. This is a hackathon prototype, not a production-validated translator.

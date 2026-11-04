@@ -5,7 +5,7 @@ Browser app for SignBridge. Plain HTML + ES modules, no build step. MediaPipe Ta
 - `index.html` - demo page: webcam preview, landmark overlay, liveness indicator, conversation panel, API key field, Live translate toggle.
 - `app.js` - page bootstrap: camera start/stop, overlay drawing, landmark queue, status line. With Live translate on, it drains the queue in 2 second windows (at most one Muse request in flight, windows dropped while busy) and runs the slice: `glossFromLandmarks` -> `glossToEnglish` -> `speakEnglish`.
 - `landmarks.js` - the landmark pipeline module. `startLandmarkPipeline(video, onFrame, { maxFps, enablePose })` opens the camera (if needed), runs HandLandmarker (2 hands) and optionally PoseLandmarker (upper body, lite model) on-device, and calls `onFrame` with plain landmark vectors at up to 15 fps. Also exports `drawFrame` (canvas overlay), `createLandmarkQueue` (FIFO for the next stage), and `startCamera` / `stopCamera`.
-- `../api/muse.js` - the only module that talks to the Meta Model API (muse-spark-1.3). `glossFromLandmarks` builds a compact text description of the window (finger extension heuristic, hand visibility, wrist travel) and asks for one gloss word or `FINGERSPELL:<letters>`. `glossToEnglish` turns the gloss into one short spoken sentence. `speakEnglish` uses the browser's built-in speechSynthesis (on-device, free).
+- `../api/muse.js` - the only module that talks to the Meta Model API (muse-spark-1.3). `glossFromLandmarks` builds a compact text description of the window (finger extension heuristic, hand visibility, wrist travel) and asks for one gloss word or `FINGERSPELL:<letter>`. `glossToEnglish` turns the gloss into one short spoken sentence. `speakEnglish` uses the browser's built-in speechSynthesis (on-device, free).
 - TODO: SAM 3.1 signer isolation (PRD step 3) is not wired in; MediaPipe landmarks are the input path and stay that way.
 - TODO: FaceLandmarker for facial grammar markers (Direction B feedback).
 - TODO: Direction B stubs in `../api/muse.js` (`transcribe`, `englishToGloss`) are not implemented.
@@ -33,19 +33,19 @@ Do not put the key in any file, URL, or commit. `.env` is gitignored.
 
 1. Camera runs, landmarks stream into the queue at up to 15 fps.
 2. Every 1.5 seconds the app drains the queue into a window (at least 6 frames).
-3. `glossFromDescription` sends Muse the compact window description (see the debug panel for the exact text).
+3. `glossFromDescription` sends Muse the compact window description. The app does not display or log per-window recognition descriptions.
 4. Muse Spark (muse-spark-1.3, temperature 0, reasoning_effort "minimal", max_tokens 512) replies with one gloss word from the fixed 40-sign coffee-shop vocabulary, `FINGERSPELL:<letter>`, or burns the cap and the app shows "unclear sign, try again".
 5. Vocabulary gloss: interrupt any spelling in progress, translate with `glossToEnglish`, speak the sentence with the browser voice.
-6. Letter: append to the spelling buffer (deduped against the last letter, so a held letter is not double-appended) and show "spelled so far: ...". A pause of 2.5s with no new letter ends the word: 2+ letters go to `wordFromLetters` ("water" becomes the spoken word "water", "xyzq" stays "xyzq"), a single letter is spoken as the letter itself.
+6. Letter: append to the spelling buffer. Repeated outputs for a held letter are deduped; an unclear window marks a gap so a repeated letter such as the two Ls in HELLO can be entered. A 4.5-second pause without a new letter ends the word. Two to eight letters go to `wordFromLetters`; a single letter is spoken as itself.
 
 Fingerspelling is a sequence task: isolated letters like D vs 1 vs pointing are undecidable alone, so single-letter fallback to unclear is correct behavior. Letters only resolve at word level, which is why the buffer exists.
 
-## Muse behavior (verified in a live smoke test)
+## Muse behavior (prior smoke-test notes, not revalidated in this audit)
 
 - muse-spark-1.3 always generates reasoning tokens before visible output. Requests set `reasoning_effort: "minimal"` (about 20 reasoning tokens on trivial inputs) and `max_tokens: 512` so distinctive inputs always have headroom.
 - A distinctive window answers cleanly and fast (about 1 to 2 seconds, exact gloss).
 - An ambiguous window deliberates until the cap and returns `content: null` with `finish_reason: "length"`. The app maps this to "unclear": the status line shows "unclear sign, try again", nothing is spoken, and the call is counted separately. It is never retried in a loop, so worst case cost per unclear window is one capped call (about 3 seconds).
-- Expected cost per call is well under a tenth of a cent at Spark output pricing (about $2.4 per 1M tokens, and each call here is only a few hundred tokens). A full demo session costs cents against the $150 credit.
+- API pricing and credit balances can change. Check current Meta billing before a live session; this page reports call counts only and does not estimate cost.
 
 ## Privacy note (known limitation of v1)
 
@@ -53,7 +53,7 @@ This slice sends a compact landmark-derived text description to Muse. That is wi
 
 ## Budget
 
-Spark pricing is roughly $0.6 in and $2.4 out per 1M tokens. One recognized window costs about 2 calls of a few hundred tokens (well under a tenth of a cent); an unclear window costs one capped call (about 512 tokens, still a tiny fraction of a cent). A busy demo session lands in the cents against the $150 credit. The page counts calls per session, including unclear ones separately. muse-wonder-1.0 is not used ($4 in / $20 out per 1M). There is no hosted TTS; speech output is the browser voice.
+The page counts Muse calls and unclear windows for this session. Check Meta's current billing page for prices; costs depend on actual input and output tokens.
 
 ## Manual verification checklist
 
@@ -73,11 +73,10 @@ Live translate (paste a valid key first):
 9. The Muse line cycles through `thinking...`, then `gloss: <word>`, then `said: <sentence>`. The sentence is spoken through the browser voice.
 10. The Conversation panel shows the gloss under "What I signed" and the sentence under "English output", and the transcript list grows.
 11. The call counter increases by 2 per recognized window and the budget line stays plausible.
-12. Sign something outside the vocabulary. The expected output is `FINGERSPELL:<letters>` more often than a wrong vocabulary word.
+12. Sign something outside the vocabulary. A clear letter should produce `FINGERSPELL:<letter>`; ambiguous windows should produce `unclear`.
 13. Wave your hand vaguely or sign nothing distinctive. The Muse line should show "unclear sign, try again" within about 3 seconds, nothing is spoken, and the unclear counter in the budget line goes up by one.
 14. Network tab while translating: only POSTs to `api.meta.ai/v1/chat/completions`, request payloads contain text descriptions only (readable in devtools), nothing else leaves the browser.
 15. Bad key on purpose: the Muse line shows a clean error (HTTP 401 mapped), the app keeps running and keeps trying the next window.
-16. The "Debug (last 10 windows)" panel under the camera shows one entry per attempt: time, gloss (or unclear / error), the letters buffer state at that moment, and the exact description text sent to Muse. The same lines appear in the devtools console prefixed `SB-DEBUG`.
 
 ## Fingerspelling test
 
@@ -88,4 +87,4 @@ Live translate (paste a valid key first):
 
 ## Tuning workflow
 
-When recognition falls back more than it should, do not guess at thresholds. Open the devtools console (or the Debug panel), copy 3 to 5 `SB-DEBUG` lines for a sign that worked and 3 to 5 for the signs that fell back (unclear or FINGERSPELL), and paste them to the agent. The failure is almost always visible in the description text itself (muddled shape fields, wrong visibility, jitter counted as motion).
+When recognition falls back more than it should, do not guess at thresholds. Reproduce the sign and report the visible status, camera framing, and whether repeated attempts give the same result. Per-window recognition descriptions are not retained or logged by the app.

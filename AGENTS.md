@@ -4,7 +4,7 @@ Project-specific instructions for AI agents working in this repository. Read `Ar
 
 ## Verification expectations
 
-- No build or test commands exist yet. Verification is: the requested artifact exists, prose and code follow the style rules below, and git state is clean and pushed.
+- No build step is required. Dependency-free logic tests: `node --experimental-default-type=module --test web/spelling.test.js api/muse.test.js`. Verification also requires real webcam landmark extraction and Muse calls with a valid local key before claiming an end-to-end demo is verified.
 - Once code is implemented, verify by running the real pipeline paths (webcam landmark extraction, Muse calls with a valid local env, avatar playback), not just imports.
 
 ## Hard rules
